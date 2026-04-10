@@ -14,6 +14,8 @@ import json
 import sys
 import os
 import logging
+from logging.handlers import RotatingFileHandler
+import re
 import getpass
 import platform
 import subprocess
@@ -30,15 +32,15 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 _APP_DIR = os.path.dirname(os.path.abspath(sys.argv[0]))
 _LOG_FILE = os.path.join(_APP_DIR, "api_debug_log.txt")
 
-logging.basicConfig(
-    filename=_LOG_FILE,
-    filemode="a",
-    level=logging.DEBUG,
-    format="%(asctime)s [%(levelname)s] %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S",
-    encoding="utf-8",
-)
 logger = logging.getLogger("wms_palletizer")
+logger.setLevel(logging.DEBUG)
+_log_handler = RotatingFileHandler(
+    _LOG_FILE, maxBytes=5 * 1024 * 1024, backupCount=3, encoding="utf-8"
+)
+_log_handler.setFormatter(logging.Formatter(
+    "%(asctime)s [%(levelname)s] %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
+))
+logger.addHandler(_log_handler)
 logger.info("=" * 60)
 logger.info("Приложение запущено. Лог-файл: %s", _LOG_FILE)
 
@@ -149,7 +151,6 @@ class WMSBackend:
     @staticmethod
     def _sanitize_log(text: str, max_len: int = 400) -> str:
         """Маскирует токены/пароли в логах."""
-        import re
         sanitized = re.sub(r'(access_token|password|Authorization)["\s:=]+["\']?[\w\-\.]+', r'\1=***', text)
         return sanitized[:max_len]
 
@@ -191,7 +192,11 @@ class WMSBackend:
             res = self._req("POST", "/gateway/system/api/user/login",
                             json={"loginName": login, "password": password,
                                   "operateTerminal": 1, "browser": "Chrome"})
-            body = res.json()
+            try:
+                body = res.json()
+            except ValueError:
+                logger.error("login: сервер вернул не JSON (status=%d)", res.status_code)
+                return False, "Ошибка сервера: получен не JSON ответ"
             if res.status_code == 200 and body.get("success"):
                 self.token = body["data"]["access_token"]
                 self.session.headers["Authorization"] = f"Bearer {self.token}"
@@ -211,7 +216,11 @@ class WMSBackend:
         try:
             res = self._req("GET", "/gateway/wms/api/tvOverseasContainerHeader/page",
                             params={"containerNumbers": container_number, "current": 1, "pageSize": 100})
-            headers_list = res.json().get("data", {}).get("list", [])
+            try:
+                headers_list = res.json().get("data", {}).get("list", [])
+            except ValueError:
+                logger.error("search_container: сервер вернул не JSON (status=%d)", res.status_code)
+                return False, "Ошибка сервера: получен не JSON ответ", [], ""
             if not headers_list:
                 return False, "Контейнер не найден в системе.", [], ""
 
@@ -230,10 +239,11 @@ class WMSBackend:
 
     # ---------- получить коробки (с авто-пагинацией) ----------
     def get_boxes(self, header_id: str) -> list:
+        MAX_PAGES = 100
         page_size = 500
         all_items = []
         current = 1
-        while True:
+        while current <= MAX_PAGES:
             try:
                 res = self._req("GET", "/gateway/wms/api/tvOverseasContainerDetail/page",
                                 params={"current": current, "pageSize": page_size,
@@ -289,7 +299,11 @@ class WMSBackend:
         try:
             res = self._req("POST", "/gateway/wms/api/containerUnPack/groupSupportConfirm",
                             json={"paramQueryList": box_list}, timeout=20)
-            body = res.json()
+            try:
+                body = res.json()
+            except ValueError:
+                logger.error("create_pallet: сервер вернул не JSON (status=%d)", res.status_code)
+                return False, "Ошибка сервера: получен не JSON ответ"
             if res.status_code == 200 and body.get("success"):
                 logger.info("Паллет создан: %s (%d коробок)", body.get("data"), len(box_list))
                 return True, str(body.get("data", ""))
@@ -302,10 +316,11 @@ class WMSBackend:
     # ---------- верификация (с авто-пагинацией) ----------
     def _fetch_all_rack_details(self, batch: str) -> list:
         """Получает все записи twPartOnRackDetail для партии с пагинацией."""
+        MAX_PAGES = 100
         page_size = 500
         all_items = []
         current = 1
-        while True:
+        while current <= MAX_PAGES:
             try:
                 res = self._req("GET", "/gateway/wms/api/twPartOnRackDetail/page",
                                 params={"saleBatch": batch, "current": current, "pageSize": page_size})
@@ -368,7 +383,11 @@ class WMSBackend:
             try:
                 res = self._req("POST", "/gateway/wms/api/twPartOnRackDetail/revoke",
                                 json={"newPackLake": pid}, timeout=15)
-                body = res.json()
+                try:
+                    body = res.json()
+                except ValueError:
+                    results.append({"pallet_id": pid, "status": "err", "msg": "Ошибка сервера: получен не JSON ответ"})
+                    continue
                 if res.status_code == 200 and body.get("success"):
                     results.append({"pallet_id": pid, "status": "ok", "msg": "Успешно отозван"})
                 else:
@@ -456,7 +475,11 @@ class WMSBackend:
     def commit_writeoff(self, payload: dict) -> tuple[bool, str]:
         try:
             res = self._req("POST", "/gateway/wms/api/rfSkuout/skuOut", json=payload)
-            body = res.json()
+            try:
+                body = res.json()
+            except ValueError:
+                logger.error("commit_writeoff: сервер вернул не JSON (status=%d)", res.status_code)
+                return False, "Ошибка сервера: получен не JSON ответ"
             if res.status_code == 200 and body.get("success"):
                 return True, "Успешно списано"
             return False, body.get("msg", "Неизвестная ошибка сервера")
@@ -470,11 +493,12 @@ class WMSBackend:
         Возвращает: (success, message, total_boxes, verified_boxes)
         """
         try:
+            MAX_PAGES = 100
             page_size = 500
             all_boxes = []
             current = 1
             total = 0
-            while True:
+            while current <= MAX_PAGES:
                 res = self._req("GET", "/gateway/wms/api/locationStock/rfStockPage", 
                                 params={"woodenNo": barcode, "pageSize": page_size, "current": current})
                 data = res.json().get("data", {})
@@ -610,7 +634,8 @@ class LoginWindow(ctk.CTk):
             return
 
         # 🛡️ ПРОВЕРКА БЕЗОПАСНОСТИ: Если логина нет в нашем жестком списке — блокируем
-        if login not in ALLOWED_USERS_LIST:
+        allowed_lower = [u.lower() for u in ALLOWED_USERS_LIST]
+        if login.lower() not in allowed_lower:
             self.status_label.configure(text="❌ Отказано в доступе. Ваш логин не авторизован для этого приложения.", text_color=C_DANGER)
             return
 
@@ -866,16 +891,17 @@ class MainWindow(ctk.CTkToplevel):
             return
 
         # Добавляем найденные коробки в список и таблицу
-        for box in boxes:
-            lake = box["smallPackLake"]
-            # Защита от дублей внутри мульти-штрихкода
-            if any(b["smallPackLake"] == lake for b in self.boxes_to_writeoff):
-                continue
-                
-            self.boxes_to_writeoff.append(box)
-            # Вставляем строку и сохраняем её IID для будущего обновления статуса
-            item_iid = self.wo_tree.insert("", "end", values=(lake, box["partNo"], box["outQty"], "Ожидает списания"))
-            box["_tree_iid"] = item_iid
+        with self._wo_lock:
+            for box in boxes:
+                lake = box["smallPackLake"]
+                # Защита от дублей внутри мульти-штрихкода
+                if any(b["smallPackLake"] == lake for b in self.boxes_to_writeoff):
+                    continue
+                    
+                self.boxes_to_writeoff.append(box)
+                # Вставляем строку и сохраняем её IID для будущего обновления статуса
+                item_iid = self.wo_tree.insert("", "end", values=(lake, box["partNo"], box["outQty"], "Ожидает списания"))
+                box["_tree_iid"] = item_iid
             
         self.log(f"✅ Штрихкод {barcode} успешно добавлен ({len(boxes)} кор.)", "ok")
         self._update_wo_ui()
@@ -1418,8 +1444,7 @@ class MainWindow(ctk.CTkToplevel):
                 self.after(0, lambda v=verified, t=total_boxes: self.log(f"БД подтверждает: {v} из {t} коробок привязаны.", "ok"))
 
             self.after(0, lambda: self._show_result_popup(created, errors))
-            self.after(0, lambda: self._set_busy(False))
-            self.after(1500, self._do_search)
+            self.after(1500, lambda: (self._set_busy(False), self._do_search()))
 
         threading.Thread(target=worker, daemon=True).start()
 
@@ -1515,4 +1540,5 @@ class MainWindow(ctk.CTkToplevel):
 
 if __name__ == "__main__":
     app = LoginWindow()
+    app.mainloop()
     app.mainloop()
