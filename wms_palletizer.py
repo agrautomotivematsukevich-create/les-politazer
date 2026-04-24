@@ -78,7 +78,7 @@ _cfg = _load_config()
 APP_TITLE = "LES — Формирование паллетов"
 APP_VERSION = "1.1"
 WINDOW_SIZE_LOGIN = "460x450"
-WINDOW_SIZE_MAIN = "900x700"
+WINDOW_SIZE_MAIN = "980x720"
 
 PRODUCTION_URL = _cfg.get("server", "production_url", fallback="http://10.203.0.10")
 _CUSTOM_KEY = _cfg.get("server", "custom_key", fallback="")
@@ -119,8 +119,47 @@ C_DANGER = "#DC2626"
 C_TEXT = "#1E293B"
 C_TEXT_SEC = "#64748B"
 C_BORDER = "#E2E8F0"
+C_SUBTLE = "#F8FAFC"
+C_SUCCESS_SOFT = "#ECFDF5"
+C_DANGER_SOFT = "#FEF2F2"
+C_WARNING_SOFT = "#FFFBEB"
 C_LOG_BG = "#0F172A"
 C_LOG_FG = "#E2E8F0"
+
+
+def _configure_treeview_style(root: tk.Misc):
+    """Keeps ttk tables visually aligned with the CustomTkinter surface."""
+    style = ttk.Style(root)
+    try:
+        style.theme_use("clam")
+    except tk.TclError:
+        pass
+
+    style.configure(
+        "WMS.Treeview",
+        background=C_CARD,
+        foreground=C_TEXT,
+        fieldbackground=C_CARD,
+        bordercolor=C_BORDER,
+        lightcolor=C_BORDER,
+        darkcolor=C_BORDER,
+        rowheight=30,
+        font=("Segoe UI", 11),
+    )
+    style.configure(
+        "WMS.Treeview.Heading",
+        background=C_SUBTLE,
+        foreground=C_TEXT,
+        bordercolor=C_BORDER,
+        relief="flat",
+        font=("Segoe UI", 11, "bold"),
+        padding=(8, 6),
+    )
+    style.map(
+        "WMS.Treeview",
+        background=[("selected", "#DBEAFE")],
+        foreground=[("selected", C_TEXT)],
+    )
 
 
 # ══════════════════════════════════════════════════════════════
@@ -557,23 +596,23 @@ class LoginWindow(ctk.CTk):
 
     def _build_ui(self):
         card = ctk.CTkFrame(self, fg_color=C_CARD, corner_radius=16, border_width=1, border_color=C_BORDER)
-        card.place(relx=0.5, rely=0.5, anchor="center", relwidth=0.85, relheight=0.92)
+        card.place(relx=0.5, rely=0.5, anchor="center", relwidth=0.84, relheight=0.88)
 
-        ctk.CTkLabel(card, text="Авторизация LES", font=("Segoe UI", 22, "bold"), text_color=C_TEXT
-                     ).pack(pady=(25, 6))
-        ctk.CTkLabel(card, text="Формирование паллетов", font=("Segoe UI", 13), text_color=C_TEXT_SEC
-                     ).pack(pady=(0, 20))
+        ctk.CTkLabel(card, text="WMS Palletizer", font=("Segoe UI", 23, "bold"), text_color=C_TEXT
+                     ).pack(pady=(28, 4))
+        ctk.CTkLabel(card, text="LES — формирование паллетов", font=("Segoe UI", 13), text_color=C_TEXT_SEC
+                     ).pack(pady=(0, 22))
 
         # Логин
         ctk.CTkLabel(card, text="Логин", font=("Segoe UI", 12), text_color=C_TEXT_SEC, anchor="w"
                      ).pack(fill="x", padx=32)
-        self.login_entry = ctk.CTkEntry(card, height=38, font=("Segoe UI", 14), placeholder_text="u000000")
+        self.login_entry = ctk.CTkEntry(card, height=40, font=("Segoe UI", 14), placeholder_text="u000000")
         self.login_entry.pack(fill="x", padx=32, pady=(2, 12))
 
         # Пароль
         ctk.CTkLabel(card, text="Пароль", font=("Segoe UI", 12), text_color=C_TEXT_SEC, anchor="w"
                      ).pack(fill="x", padx=32)
-        self.pass_entry = ctk.CTkEntry(card, height=38, font=("Segoe UI", 14), show="●", placeholder_text="••••••")
+        self.pass_entry = ctk.CTkEntry(card, height=40, font=("Segoe UI", 14), show="●", placeholder_text="••••••")
         self.pass_entry.pack(fill="x", padx=32, pady=(2, 15))
         self.pass_entry.bind("<Return>", lambda e: self._do_login())
 
@@ -588,6 +627,7 @@ class LoginWindow(ctk.CTk):
         # Статус
         self.status_label = ctk.CTkLabel(card, text="", font=("Segoe UI", 12), text_color=C_DANGER, wraplength=320)
         self.status_label.pack(pady=(5, 10))
+        self.login_entry.focus_set()
 
     def _do_login(self):
         # Теперь берем логин из поля ввода
@@ -639,7 +679,7 @@ class MainWindow(ctk.CTkToplevel):
         self.parent = parent
         self.title(APP_TITLE)
         self.geometry(WINDOW_SIZE_MAIN)
-        self.minsize(800, 600)
+        self.minsize(860, 640)
         self.configure(fg_color=C_BG)
         
         try:
@@ -662,13 +702,14 @@ class MainWindow(ctk.CTkToplevel):
         # Callback при истечении токена
         self.backend._on_auth_expired = lambda: self.after(0, self._handle_auth_expired)
 
+        _configure_treeview_style(self)
         self._build_ui(server_label)
         self.log(f"Подключено к серверу: {server_label}")
         self.log("Готово к работе. Введите номер контейнера и нажмите «Найти».")
 
     def _center(self):
         self.update_idletasks()
-        w, h = 900, 700
+        w, h = 980, 720
         x = (self.winfo_screenwidth() - w) // 2
         y = (self.winfo_screenheight() - h) // 2
         self.geometry(f"{w}x{h}+{x}+{y}")
@@ -683,29 +724,32 @@ class MainWindow(ctk.CTkToplevel):
 
     def _build_ui(self, server_label: str):
         # === ВЕРХНЯЯ ПАНЕЛЬ ===
-        top = ctk.CTkFrame(self, fg_color=C_CARD, corner_radius=12, border_width=1, border_color=C_BORDER, height=60)
-        top.pack(fill="x", padx=16, pady=(12, 6))
+        top = ctk.CTkFrame(self, fg_color=C_CARD, corner_radius=12, border_width=1, border_color=C_BORDER, height=66)
+        top.pack(fill="x", padx=18, pady=(14, 7))
         top.pack_propagate(False)
 
-        ctk.CTkLabel(top, text="Номер поставки:", font=("Segoe UI", 13), text_color=C_TEXT).pack(side="left", padx=(16, 8), pady=12)
+        ctk.CTkLabel(top, text="Поставка / контейнер:", font=("Segoe UI", 13, "bold"), text_color=C_TEXT).pack(side="left", padx=(18, 8), pady=14)
 
-        self.search_entry = ctk.CTkEntry(top, height=36, width=340, font=("Segoe UI", 14), placeholder_text="Например: C029")
-        self.search_entry.pack(side="left", padx=4, pady=12)
+        self.search_entry = ctk.CTkEntry(top, height=38, width=380, font=("Segoe UI", 14), placeholder_text="Например: C029")
+        self.search_entry.pack(side="left", padx=4, pady=14)
         self.search_entry.bind("<Return>", lambda e: self._do_search())
 
-        self.search_btn = ctk.CTkButton(top, text="Найти", width=100, height=36, font=("Segoe UI", 13, "bold"),
+        self.search_btn = ctk.CTkButton(top, text="Найти", width=116, height=38, font=("Segoe UI", 13, "bold"),
                                         fg_color=C_PRIMARY, hover_color=C_PRIMARY_HOVER, corner_radius=8,
                                         command=self._do_search)
-        self.search_btn.pack(side="left", padx=8, pady=12)
+        self.search_btn.pack(side="left", padx=(8, 12), pady=14)
 
-        ctk.CTkLabel(top, text=f"🟢  {server_label}", font=("Segoe UI", 11), text_color=C_SUCCESS).pack(side="right", padx=16)
+        server_pill = ctk.CTkFrame(top, fg_color=C_SUCCESS_SOFT, corner_radius=18, border_width=1, border_color="#BBF7D0")
+        server_pill.pack(side="right", padx=18, pady=16)
+        ctk.CTkLabel(server_pill, text=f"● {server_label}", font=("Segoe UI", 11, "bold"), text_color=C_SUCCESS
+                     ).pack(padx=12, pady=3)
 
         # === СРЕДНЯЯ ЧАСТЬ — TABVIEW ===
         self.tabview = ctk.CTkTabview(self, fg_color=C_CARD, corner_radius=12, border_width=1, border_color=C_BORDER,
                                       segmented_button_fg_color="#94A3B8", segmented_button_unselected_color="#94A3B8", 
                                       segmented_button_selected_color=C_PRIMARY, segmented_button_selected_hover_color=C_PRIMARY_HOVER,
                                       text_color="#FFFFFF")
-        self.tabview.pack(fill="both", expand=True, padx=16, pady=6)
+        self.tabview.pack(fill="both", expand=True, padx=18, pady=7)
 
         tab1 = self.tabview.add("📦  К формированию")
         tab2 = self.tabview.add("📋  Сформированные паллеты")
@@ -716,41 +760,46 @@ class MainWindow(ctk.CTkToplevel):
         self._build_tab_writeoff(tab3)
 
         # === НИЖНЯЯ ПАНЕЛЬ ===
-        self.bottom_bar = ctk.CTkFrame(self, fg_color=C_CARD, corner_radius=12, border_width=1, border_color=C_BORDER, height=60)
-        self.bottom_bar.pack(fill="x", padx=16, pady=(6, 8))
+        self.bottom_bar = ctk.CTkFrame(self, fg_color=C_CARD, corner_radius=12, border_width=1, border_color=C_BORDER, height=64)
+        self.bottom_bar.pack(fill="x", padx=18, pady=(7, 8))
         self.bottom_bar.pack_propagate(False)
 
         self.select_all_var = ctk.BooleanVar(value=False)
-        self.select_all_cb = ctk.CTkCheckBox(self.bottom_bar, text="Выбрать всё", variable=self.select_all_var,
+        self.select_all_cb = ctk.CTkCheckBox(self.bottom_bar, text="Выбрать все", variable=self.select_all_var,
                                              font=("Segoe UI", 12), width=24, fg_color=C_PRIMARY, hover_color=C_PRIMARY_HOVER,
                                              command=self._toggle_select_all)
-        self.select_all_cb.pack(side="left", padx=(16, 8), pady=12)
+        self.select_all_cb.pack(side="left", padx=(18, 10), pady=13)
 
-        self.selected_label = ctk.CTkLabel(self.bottom_bar, text="Выбрано: 0 паллетов", font=("Segoe UI", 13), text_color=C_TEXT_SEC)
-        self.selected_label.pack(side="left", padx=(0, 16), pady=12)
+        self.selected_label = ctk.CTkLabel(self.bottom_bar, text="Выбрано: 0 паллетов", font=("Segoe UI", 13, "bold"), text_color=C_TEXT_SEC)
+        self.selected_label.pack(side="left", padx=(0, 16), pady=13)
 
-        self.revoke_btn = ctk.CTkButton(self.bottom_bar, text="Отозвать выделенные", height=38, font=("Segoe UI", 13, "bold"),
+        self.revoke_btn = ctk.CTkButton(self.bottom_bar, text="Отозвать выбранные", width=210, height=40, font=("Segoe UI", 13, "bold"),
                                         fg_color=C_DANGER, hover_color="#B91C1C", corner_radius=8,
                                         command=self._do_revoke, state="disabled")
 
-        self.form_btn = ctk.CTkButton(self.bottom_bar, text="Формировать выделенные", height=38, font=("Segoe UI", 13, "bold"),
+        self.form_btn = ctk.CTkButton(self.bottom_bar, text="Сформировать выбранные", width=230, height=40, font=("Segoe UI", 13, "bold"),
                                       fg_color=C_SUCCESS, hover_color="#15803D", corner_radius=8,
                                       command=self._do_form_pallets, state="disabled")
-        self.form_btn.pack(side="right", padx=(4, 16), pady=12)
+        self.form_btn.pack(side="right", padx=(4, 18), pady=12)
 
-       # === ЛОГ-ПАНЕЛЬ ===
-        self.log_frame = ctk.CTkFrame(self, fg_color=C_CARD, corner_radius=12, border_width=1, border_color=C_BORDER, height=150)
-        self.log_frame.pack(fill="x", padx=16, pady=(0, 10))
+        # === ЛОГ-ПАНЕЛЬ ===
+        self.log_frame = ctk.CTkFrame(self, fg_color=C_CARD, corner_radius=12, border_width=1, border_color=C_BORDER, height=170)
+        self.log_frame.pack(fill="x", padx=18, pady=(0, 12))
         self.log_frame.pack_propagate(False)
 
         log_header = ctk.CTkFrame(self.log_frame, fg_color="transparent", height=28)
         log_header.pack(fill="x")
         log_header.pack_propagate(False)
         ctk.CTkLabel(log_header, text="Журнал событий", font=("Segoe UI", 11, "bold"), text_color=C_TEXT_SEC).pack(side="left", padx=12, pady=4)
+        ctk.CTkLabel(log_header, text="последние события внизу", font=("Segoe UI", 10), text_color=C_TEXT_SEC).pack(side="right", padx=12, pady=4)
 
         self.log_text = ctk.CTkTextbox(self.log_frame, font=("Consolas", 11), fg_color=C_LOG_BG, text_color=C_LOG_FG,
-                                       corner_radius=8, state="disabled", wrap="word")
+                                       border_width=1, border_color="#1E293B", corner_radius=8, state="disabled", wrap="word")
         self.log_text.pack(fill="both", expand=True, padx=8, pady=(0, 8))
+        self.log_text.tag_config("info", foreground="#BFDBFE")
+        self.log_text.tag_config("ok", foreground="#BBF7D0")
+        self.log_text.tag_config("err", foreground="#FECACA")
+        self.log_text.tag_config("warn", foreground="#FDE68A")
 
         self.tabview.configure(command=self._on_tab_changed)
 
@@ -760,7 +809,7 @@ class MainWindow(ctk.CTkToplevel):
 
         self.form_header = ctk.CTkFrame(parent, fg_color="transparent", height=40)
         self.form_count_label = ctk.CTkLabel(self.form_header, text="", font=("Segoe UI", 13, "bold"), text_color=C_TEXT)
-        self.form_count_label.pack(side="left", padx=16, pady=8)
+        self.form_count_label.pack(side="left", padx=18, pady=8)
 
         self.form_scroll = ctk.CTkScrollableFrame(parent, fg_color="transparent", corner_radius=0)
 
@@ -770,7 +819,7 @@ class MainWindow(ctk.CTkToplevel):
 
         self.revoke_header = ctk.CTkFrame(parent, fg_color="transparent", height=40)
         self.revoke_count_label = ctk.CTkLabel(self.revoke_header, text="", font=("Segoe UI", 13, "bold"), text_color=C_TEXT)
-        self.revoke_count_label.pack(side="left", padx=16, pady=8)
+        self.revoke_count_label.pack(side="left", padx=18, pady=8)
 
         self.revoke_scroll = ctk.CTkScrollableFrame(parent, fg_color="transparent", corner_radius=0)
 
@@ -781,45 +830,50 @@ class MainWindow(ctk.CTkToplevel):
         self.boxes_to_writeoff = [] # Внутренний список готовых к списанию коробок
 
         # --- Верхняя панель со сканером ---
-        scan_frame = ctk.CTkFrame(parent, fg_color="transparent")
-        scan_frame.pack(fill="x", pady=(10, 5), padx=8)
+        scan_frame = ctk.CTkFrame(parent, fg_color="transparent", height=48)
+        scan_frame.pack(fill="x", pady=(10, 6), padx=10)
+        scan_frame.pack_propagate(False)
 
-        ctk.CTkLabel(scan_frame, text="Сканируйте штрихкод:", font=("Segoe UI", 13)).pack(side="left", padx=(0, 10))
+        ctk.CTkLabel(scan_frame, text="Штрихкод коробки:", font=("Segoe UI", 13, "bold"), text_color=C_TEXT).pack(side="left", padx=(0, 10), pady=6)
         
-        self.scan_entry = ctk.CTkEntry(scan_frame, height=36, width=300, font=("Segoe UI", 14), placeholder_text="Фокус здесь...")
-        self.scan_entry.pack(side="left")
+        self.scan_entry = ctk.CTkEntry(scan_frame, height=38, width=340, font=("Segoe UI", 14), placeholder_text="Сканируйте или введите вручную")
+        self.scan_entry.pack(side="left", pady=5)
         self.scan_entry.bind("<Return>", self._on_box_scanned)
 
-        self.clear_scan_btn = ctk.CTkButton(scan_frame, text="Очистить список", width=120, height=36, 
+        self.clear_scan_btn = ctk.CTkButton(scan_frame, text="Очистить список", width=138, height=38,
                                             fg_color=C_TEXT_SEC, hover_color="#475569", 
                                             command=self._clear_writeoff_list)
-        self.clear_scan_btn.pack(side="right")
+        self.clear_scan_btn.pack(side="right", pady=5)
 
         # --- Таблица (Treeview) ---
         table_frame = ctk.CTkFrame(parent, fg_color=C_CARD, corner_radius=8, border_width=1, border_color=C_BORDER)
-        table_frame.pack(fill="both", expand=True, padx=8, pady=5)
+        table_frame.pack(fill="both", expand=True, padx=10, pady=5)
 
         cols = ("lake", "part", "qty", "status")
-        self.wo_tree = ttk.Treeview(table_frame, columns=cols, show="headings")
+        self.wo_tree = ttk.Treeview(table_frame, columns=cols, show="headings", style="WMS.Treeview")
         self.wo_tree.heading("lake", text="ID Коробки")
         self.wo_tree.heading("part", text="Деталь")
         self.wo_tree.heading("qty", text="Кол-во")
         self.wo_tree.heading("status", text="Статус")
         
-        self.wo_tree.column("lake", width=160)
-        self.wo_tree.column("part", width=120)
-        self.wo_tree.column("qty", width=60, anchor="center")
-        self.wo_tree.column("status", width=200)
-        self.wo_tree.pack(fill="both", expand=True, padx=4, pady=4)
+        self.wo_tree.column("lake", width=190, minwidth=150)
+        self.wo_tree.column("part", width=160, minwidth=120)
+        self.wo_tree.column("qty", width=76, minwidth=64, anchor="center")
+        self.wo_tree.column("status", width=260, minwidth=180)
+        self.wo_tree.tag_configure("pending", background=C_SUBTLE, foreground=C_TEXT_SEC)
+        self.wo_tree.tag_configure("checking", background=C_WARNING_SOFT, foreground=C_TEXT)
+        self.wo_tree.tag_configure("done", background=C_SUCCESS_SOFT, foreground=C_TEXT)
+        self.wo_tree.tag_configure("error", background=C_DANGER_SOFT, foreground=C_DANGER)
+        self.wo_tree.pack(fill="both", expand=True, padx=6, pady=6)
 
         # --- Нижняя панель действий ---
         btn_frame = ctk.CTkFrame(parent, fg_color="transparent")
-        btn_frame.pack(fill="x", padx=8, pady=(5, 10))
+        btn_frame.pack(fill="x", padx=10, pady=(6, 10))
 
         self.wo_count_label = ctk.CTkLabel(btn_frame, text="Готово к списанию: 0 коробок", font=("Segoe UI", 13, "bold"), text_color=C_TEXT)
         self.wo_count_label.pack(side="left")
 
-        self.wo_commit_btn = ctk.CTkButton(btn_frame, text="⚠️ Подтвердить списание", height=38, font=("Segoe UI", 13, "bold"),
+        self.wo_commit_btn = ctk.CTkButton(btn_frame, text="Подтвердить списание", width=190, height=40, font=("Segoe UI", 13, "bold"),
                                            fg_color=C_DANGER, hover_color="#B91C1C", corner_radius=8, state="disabled",
                                            command=self._do_mass_writeoff)
         self.wo_commit_btn.pack(side="right")
@@ -863,7 +917,7 @@ class MainWindow(ctk.CTkToplevel):
                     
                 self.boxes_to_writeoff.append(box)
                 # Вставляем строку и сохраняем её IID для будущего обновления статуса
-                item_iid = self.wo_tree.insert("", "end", values=(lake, box["partNo"], box["outQty"], "Ожидает списания"))
+                item_iid = self.wo_tree.insert("", "end", values=(lake, box["partNo"], box["outQty"], "Ожидает списания"), tags=("pending",))
                 box["_tree_iid"] = item_iid
             
         self.log(f"✅ Штрихкод {barcode} успешно добавлен ({len(boxes)} кор.)", "ok")
@@ -912,13 +966,13 @@ class MainWindow(ctk.CTkToplevel):
                 if ok:
                     success_count += 1
                     # Временно ставим статус "Проверка..."
-                    self.after(0, lambda iid=tree_iid: self.wo_tree.set(iid, "status", "⏳ Проверка..."))
+                    self.after(0, lambda iid=tree_iid: (self.wo_tree.set(iid, "status", "⏳ Проверка..."), self.wo_tree.item(iid, tags=("checking",))))
                     self.after(0, lambda l=box["smallPackLake"]: self.log(f" ✅ {l} — запрос на списание отправлен", "ok"))
                     with self._wo_lock:
                         if box in self.boxes_to_writeoff:
                             self.boxes_to_writeoff.remove(box)
                 else:
-                    self.after(0, lambda iid=tree_iid, m=msg: self.wo_tree.set(iid, "status", f"❌ Ошибка: {m}"))
+                    self.after(0, lambda iid=tree_iid, m=msg: (self.wo_tree.set(iid, "status", f"❌ Ошибка: {m}"), self.wo_tree.item(iid, tags=("error",))))
                     self.after(0, lambda l=box["smallPackLake"], m=msg: self.log(f" ❌ {l} — ошибка: {m}", "err"))
 
             # 2. Теперь проверяем фактическое перемещение по уникальным штрихкодам
@@ -946,7 +1000,7 @@ class MainWindow(ctk.CTkToplevel):
                 remaining_set2 = set(id(b) for b in self.boxes_to_writeoff)
             for box in items_to_process:
                  if id(box) not in remaining_set2:
-                     self.after(0, lambda iid=box["_tree_iid"]: self.wo_tree.set(iid, "status", "✅ Списано и проверено"))
+                     self.after(0, lambda iid=box["_tree_iid"]: (self.wo_tree.set(iid, "status", "✅ Списано и проверено"), self.wo_tree.item(iid, tags=("done",))))
 
             self.after(0, lambda: self.log(f"Операция завершена. Успешно списано: {success_count} из {n}. Подтверждено складом: {total_verified}.", "ok" if success_count == n else "warn"))
             self.after(0, lambda: self._update_wo_ui())
@@ -959,7 +1013,7 @@ class MainWindow(ctk.CTkToplevel):
         prefix = {"info": "ℹ", "ok": "✅", "err": "❌", "warn": "⚠️"}.get(tag, "•")
         line = f"[{ts}] {prefix}  {msg}\n"
         self.log_text.configure(state="normal")
-        self.log_text.insert("end", line)
+        self.log_text.insert("end", line, tag)
         self.log_text.see("end")
         self.log_text.configure(state="disabled")
         logger.info("[%s] %s", tag.upper(), msg)
@@ -1054,7 +1108,7 @@ class MainWindow(ctk.CTkToplevel):
         self.found_pallets.clear()
         self.form_placeholder.place_forget()
         self.form_header.pack(fill="x", side="top")
-        self.form_scroll.pack(fill="both", expand=True, padx=8, pady=(0, 8))
+        self.form_scroll.pack(fill="both", expand=True, padx=10, pady=(0, 10))
 
         for w in self.form_scroll.winfo_children():
             w.destroy()
@@ -1085,30 +1139,30 @@ class MainWindow(ctk.CTkToplevel):
                 detail_parts.append(f"Ящик {wn} → {cartons_str}")
             detail_text = "  |  ".join(detail_parts)
 
-            row = ctk.CTkFrame(self.form_scroll, fg_color="#F8FAFC", corner_radius=8, border_width=1, border_color=C_BORDER, height=64)
-            row.pack(fill="x", pady=3, padx=4)
+            row = ctk.CTkFrame(self.form_scroll, fg_color=C_SUBTLE, corner_radius=8, border_width=1, border_color=C_BORDER, height=70)
+            row.pack(fill="x", pady=4, padx=4)
             row.pack_propagate(False)
 
             left_frame = ctk.CTkFrame(row, fg_color="transparent")
             left_frame.pack(side="left", fill="y", padx=(0, 4))
 
             ctk.CTkCheckBox(left_frame, text="", variable=var, width=24, command=self._update_selection_count,
-                            fg_color=C_PRIMARY, hover_color=C_PRIMARY_HOVER).pack(side="left", padx=(12, 4), pady=20)
+                            fg_color=C_PRIMARY, hover_color=C_PRIMARY_HOVER).pack(side="left", padx=(12, 4), pady=23)
 
             text_frame = ctk.CTkFrame(row, fg_color="transparent")
             text_frame.pack(side="left", fill="both", expand=True, pady=4)
 
             ctk.CTkLabel(text_frame, text=f"{part_no}  ({len(box_list)} кор.)", font=("Segoe UI", 13, "bold"), text_color=C_TEXT,
-                         anchor="w").pack(fill="x", padx=(4, 0), pady=(4, 0))
+                         anchor="w").pack(fill="x", padx=(4, 0), pady=(6, 0))
 
             ctk.CTkLabel(text_frame, text=detail_text, font=("Segoe UI", 10), text_color=C_TEXT_SEC,
-                         anchor="w", wraplength=500).pack(fill="x", padx=(4, 0), pady=(0, 2))
+                         anchor="w", wraplength=640).pack(fill="x", padx=(4, 0), pady=(0, 2))
 
             split_label = ctk.CTkLabel(row, text="1 паллет (все шт)", font=("Segoe UI", 11), text_color=C_TEXT_SEC)
-            split_label.pack(side="right", padx=(0, 12), pady=20)
+            split_label.pack(side="right", padx=(0, 12), pady=23)
             p_data["_split_label"] = split_label
 
-            ctk.CTkButton(row, text="🔀 Разбить", width=90, height=28, font=("Segoe UI", 11), corner_radius=6,
+            ctk.CTkButton(row, text="Разбить", width=92, height=30, font=("Segoe UI", 11, "bold"), corner_radius=6,
                           fg_color="#6366F1", hover_color="#4F46E5", command=lambda _p=p_data: self._open_split_dialog(_p)
                           ).pack(side="right", padx=(0, 6), pady=20)
 
@@ -1122,7 +1176,7 @@ class MainWindow(ctk.CTkToplevel):
         self.revoke_vars.clear()
         self.revoke_placeholder.place_forget()
         self.revoke_header.pack(fill="x", side="top")
-        self.revoke_scroll.pack(fill="both", expand=True, padx=8, pady=(0, 8))
+        self.revoke_scroll.pack(fill="both", expand=True, padx=10, pady=(0, 10))
 
         for w in self.revoke_scroll.winfo_children():
             w.destroy()
@@ -1140,23 +1194,23 @@ class MainWindow(ctk.CTkToplevel):
             self.revoke_vars.append(var)
             self.formed_pallets.append({**p, "var": var})
 
-            row = ctk.CTkFrame(self.revoke_scroll, fg_color="#FEF2F2", corner_radius=8, border_width=1, border_color="#FECACA", height=48)
-            row.pack(fill="x", pady=3, padx=4)
+            row = ctk.CTkFrame(self.revoke_scroll, fg_color=C_DANGER_SOFT, corner_radius=8, border_width=1, border_color="#FECACA", height=54)
+            row.pack(fill="x", pady=4, padx=4)
             row.pack_propagate(False)
 
             ctk.CTkLabel(row, text=f"{p['pallet_id']}  (Деталь: {p['part_no']}, {p['count']} кор.)",
-                         font=("Segoe UI", 13), text_color=C_TEXT, anchor="w").pack(side="left", padx=16, pady=10)
+                         font=("Segoe UI", 13), text_color=C_TEXT, anchor="w").pack(side="left", fill="x", expand=True, padx=16, pady=12)
 
             ctk.CTkCheckBox(row, text="", variable=var, width=24, command=self._update_selection_count,
-                            fg_color=C_DANGER, hover_color="#B91C1C").pack(side="right", padx=(0, 12), pady=10)
+                            fg_color=C_DANGER, hover_color="#B91C1C").pack(side="right", padx=(0, 12), pady=13)
 
             pid = p["pallet_id"]
-            ctk.CTkButton(row, text="Бол.", width=38, height=26, font=("Segoe UI", 10), corner_radius=6,
+            ctk.CTkButton(row, text="Большая", width=78, height=28, font=("Segoe UI", 10, "bold"), corner_radius=6,
                           fg_color="#6366F1", hover_color="#4F46E5", command=lambda _pid=pid: self._do_print(_pid, 2)
-                          ).pack(side="right", padx=(0, 4), pady=10)
-            ctk.CTkButton(row, text="Мал.", width=38, height=26, font=("Segoe UI", 10), corner_radius=6,
+                          ).pack(side="right", padx=(0, 5), pady=13)
+            ctk.CTkButton(row, text="Малая", width=66, height=28, font=("Segoe UI", 10, "bold"), corner_radius=6,
                           fg_color="#8B5CF6", hover_color="#7C3AED", command=lambda _pid=pid: self._do_print(_pid, 1)
-                          ).pack(side="right", padx=(0, 4), pady=10)
+                          ).pack(side="right", padx=(0, 5), pady=13)
 
     def _do_print(self, pallet_id: str, print_type: int):
         type_label = "маленькая" if print_type == 1 else "большая"
@@ -1224,7 +1278,7 @@ class MainWindow(ctk.CTkToplevel):
 
         def _add_row(initial_value: int = 0):
             idx = len(rows) + 1
-            row_frame = ctk.CTkFrame(scroll, fg_color="#F8FAFC", corner_radius=8, border_width=1, border_color=C_BORDER, height=44)
+            row_frame = ctk.CTkFrame(scroll, fg_color=C_SUBTLE, corner_radius=8, border_width=1, border_color=C_BORDER, height=44)
             row_frame.pack(fill="x", pady=3, padx=4)
             row_frame.pack_propagate(False)
 
@@ -1315,7 +1369,7 @@ class MainWindow(ctk.CTkToplevel):
             return
         else:
             # Возвращаем панель на место, если мы на первых двух вкладках
-            self.bottom_bar.pack(fill="x", padx=16, pady=(6, 8), before=self.log_frame)
+            self.bottom_bar.pack(fill="x", padx=18, pady=(7, 8), before=self.log_frame)
 
         # 2. Логика для первых двух вкладок
         is_form_tab = "формированию" in current_tab
@@ -1326,7 +1380,7 @@ class MainWindow(ctk.CTkToplevel):
             self.selected_label.configure(text=f"Выбрано к формированию: {n} {word}")
             self.form_btn.configure(state="normal" if n > 0 else "disabled")
             self.revoke_btn.configure(state="disabled")
-            self.form_btn.pack(side="right", padx=(4, 16), pady=12)
+            self.form_btn.pack(side="right", padx=(4, 18), pady=12)
             self.revoke_btn.pack_forget()
         else:
             n = sum(1 for p in self.formed_pallets if p["var"].get())
@@ -1334,7 +1388,7 @@ class MainWindow(ctk.CTkToplevel):
             self.selected_label.configure(text=f"Выбрано к отзыву: {n} {word}")
             self.revoke_btn.configure(state="normal" if n > 0 else "disabled")
             self.form_btn.configure(state="disabled")
-            self.revoke_btn.pack(side="right", padx=(4, 16), pady=12)
+            self.revoke_btn.pack(side="right", padx=(4, 18), pady=12)
             self.form_btn.pack_forget()
 
     @staticmethod
@@ -1472,7 +1526,7 @@ class MainWindow(ctk.CTkToplevel):
             tree_frame.pack(fill="x", padx=24, pady=(0, 10))
 
             cols = ("part", "pallet", "boxes")
-            tree = ttk.Treeview(tree_frame, columns=cols, show="headings", height=min(len(created), 6))
+            tree = ttk.Treeview(tree_frame, columns=cols, show="headings", height=min(len(created), 6), style="WMS.Treeview")
             tree.heading("part", text="Деталь")
             tree.heading("pallet", text="ID Паллета")
             tree.heading("boxes", text="Коробок")
