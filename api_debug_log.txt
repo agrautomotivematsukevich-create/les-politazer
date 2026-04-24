@@ -1,0 +1,6 @@
+2026-04-24 07:45:05 [INFO] ============================================================
+2026-04-24 07:45:05 [INFO] Приложение запущено. Лог-файл: C:\Users\u000644\Music\les-politazer-main\api_debug_log.txt
+2026-04-24 07:45:05 [INFO] Создан config.ini с настройками по умолчанию
+2026-04-24 07:45:11 [DEBUG] → POST http://10.203.0.10/gateway/system/api/user/login  params=None
+2026-04-24 07:45:11 [DEBUG] ← 503 http://10.203.0.10/gateway/system/api/user/login  body=
+2026-04-24 07:45:11 [ERROR] login: сервер вернул не JSON (status=503)
